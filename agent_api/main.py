@@ -3,7 +3,7 @@ from pydantic import BaseModel
 import nest_asyncio
 
 from agents import Runner
-from agent_api.agents import vehicle_recommendation_agent
+from agent_api.agents import vehicle_entry_agent
 
 nest_asyncio.apply()
 
@@ -17,7 +17,7 @@ class UserQuery(BaseModel):
 @app.post("/recommend")
 async def recommend_vehicle(query: UserQuery):
     result = await Runner.run(
-        vehicle_recommendation_agent,
+        vehicle_entry_agent,
         query.question
     )
     return {"answer": result.final_output}
