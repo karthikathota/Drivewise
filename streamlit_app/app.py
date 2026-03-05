@@ -1,173 +1,121 @@
 import streamlit as st
 import requests
-from datetime import datetime
-
-# =====================================================
-# CONFIG
-# =====================================================
+import uuid
 
 API_URL = "http://127.0.0.1:8000/recommend"
 
-st.set_page_config(
-    page_title="DriveWise | AI Vehicle Advisor",
-    page_icon="🚗",
-    layout="wide",
-)
+st.set_page_config(page_title="DriveWise", page_icon="🚗", layout="wide")
 
-# =====================================================
+
+# ===============================
 # SESSION STATE INIT
-# =====================================================
+# ===============================
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-if "pending_query" not in st.session_state:
-    st.session_state.pending_query = None
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
 
-# =====================================================
-# SAFE BACKEND CALL
-# =====================================================
 
-def safe_backend_call(query: str):
+# ===============================
+# BACKEND CALL
+# Client timeout: 60s
+# Server timeout: 45s (agents.py) — server always responds before client cuts off
+# ===============================
+
+def call_backend(query: str) -> str:
     try:
         response = requests.post(
             API_URL,
-            json={"question": query},
-            timeout=30
+            json={
+                "question": query,
+                "session_id": st.session_state.session_id
+            },
+            timeout=60  # Must stay > server-side asyncio.wait_for timeout (45s)
         )
+        if response.status_code == 200:
+            return response.json().get("answer", "No answer returned.")
+        return f"⚠️ Backend returned error {response.status_code}. Please try again."
 
-        if response.status_code != 200:
-            return False, f"Backend returned status {response.status_code}"
-
-        data = response.json()
-
-        if "answer" not in data:
-            return False, "Invalid backend response format."
-
-        return True, data["answer"]
-
-    except requests.exceptions.Timeout:
-        return False, "Backend request timed out."
     except requests.exceptions.ConnectionError:
-        return False, "Cannot connect to backend."
+        return (
+            "❌ Cannot reach the backend. "
+            "Make sure the FastAPI server is running:\n\n"
+            "```\nuvicorn main:app --reload --port 8000\n```"
+        )
+    except requests.exceptions.Timeout:
+        return (
+            "⏱️ The request timed out. "
+            "The server is taking longer than expected — please try again."
+        )
     except Exception as e:
-        return False, str(e)
+        return f"❌ Unexpected error: {e}"
 
-# =====================================================
-# SIDEBAR
-# =====================================================
 
-with st.sidebar:
-    st.title("🚗 DriveWise")
-    st.caption("Multi-Agent Vehicle Recommendation System")
+# ===============================
+# HEADER
+# ===============================
 
-    st.markdown("---")
-
-    st.subheader("💡 Example Queries")
-
-    example_queries = [
-        "Suggest 3 electric cars under $60,000",
-        "Family friendly SUV between 50k and 80k",
-        "Best hybrid cars for city driving",
-        "Affordable EVs with good range",
-    ]
-
-    for q in example_queries:
-        if st.button(q, use_container_width=True):
-            st.session_state.pending_query = q
-
-    st.markdown("---")
-
-    if st.button("🗑️ Clear Conversation", use_container_width=True):
-        st.session_state.messages = []
-        st.session_state.pending_query = None
-
-    st.markdown("---")
-    st.caption("Final Year Project • DriveWise")
-
-# =====================================================
-# MAIN HEADER
-# =====================================================
-
-st.markdown(
-    """
-    <h1 style='margin-bottom: 0;'>🚘 DriveWise AI Advisor</h1>
-    <p style='color: gray; margin-top: 4px;'>
-        Ask questions about vehicles. Our multi-agent AI handles the rest.
-    </p>
-    """,
-    unsafe_allow_html=True
-)
-
+st.title("🚘 DriveWise AI Advisor")
+st.caption("Your premium vehicle recommendation assistant — powered by AI")
 st.divider()
 
-# =====================================================
-# EMPTY STATE
-# =====================================================
 
-if len(st.session_state.messages) == 0:
-    st.info(
-        "👋 Welcome to DriveWise!\n\n"
-        "Use the chat below or click an example from the sidebar."
-    )
-
-# =====================================================
-# DISPLAY CHAT
-# =====================================================
+# ===============================
+# DISPLAY CHAT HISTORY
+# ===============================
 
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# =====================================================
+
+# ===============================
 # CHAT INPUT
-# =====================================================
+# ===============================
 
-user_input = st.chat_input("Type your vehicle query here...")
+user_input = st.chat_input("Tell me your budget, needs, or preferences...")
 
-# Handle manual input
 if user_input:
-    st.session_state.pending_query = user_input
-
-# Handle example-triggered input
-if st.session_state.pending_query:
-
-    query = st.session_state.pending_query
-    st.session_state.pending_query = None
-
-    # Add user message
-    st.session_state.messages.append({
-        "role": "user",
-        "content": query,
-        "time": datetime.now()
-    })
-
+    # 1. Store + render user message immediately
+    st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
-        st.markdown(query)
+        st.markdown(user_input)
 
-    # Assistant response
+    # 2. Call backend and render response in assistant bubble
     with st.chat_message("assistant"):
-        with st.spinner("Analyzing your request..."):
-            success, result = safe_backend_call(query)
+        with st.spinner("Finding the best vehicles for you..."):
+            response = call_backend(user_input)
+        st.markdown(response)
 
-            if success:
-                st.markdown(result)
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": result,
-                    "time": datetime.now()
-                })
-            else:
-                st.error(f"❌ {result}")
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": f"Error: {result}",
-                    "time": datetime.now()
-                })
+    # 3. Store assistant message
+    st.session_state.messages.append({"role": "assistant", "content": response})
 
-# =====================================================
-# FOOTER
-# =====================================================
+    # No st.rerun() here — causes a double-render loop.
+    # Streamlit re-renders naturally after this block completes.
 
-st.divider()
-st.caption("DriveWise • Multi-Agent AI • Electric & Hybrid Recommendations")
+
+# ===============================
+# SIDEBAR
+# ===============================
+
+with st.sidebar:
+    st.markdown("### 🚗 DriveWise")
+    st.markdown("**Try asking:**")
+    st.markdown(
+        "- *Family SUV around $50,000*\n"
+        "- *Eco-friendly car under $40k*\n"
+        "- *Best EVs between $30k and $60k*\n"
+        "- *Affordable crossover for a family*\n"
+        "- *Hybrid SUV for a family under $55k*"
+    )
+    st.divider()
+
+    if st.button("🗑️ Clear Conversation", use_container_width=True):
+        st.session_state.messages = []
+        st.session_state.session_id = str(uuid.uuid4())
+        st.rerun()
+
+    st.markdown("---")
+    st.caption(f"Session: `{st.session_state.session_id[:8]}...`")
