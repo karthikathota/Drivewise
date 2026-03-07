@@ -1,3 +1,38 @@
+# =====================================================
+# DRIVEWISE — MULTI-AGENT ARCHITECTURE
+# =====================================================
+#
+# DESIGN: 2 layers, specialists run in PARALLEL
+#
+#   Layer 1 — Triage Agent
+#     Reads the user query, classifies intents (budget /
+#     family / eco / luxury), and fans out to the relevant
+#     specialists concurrently using asyncio.gather.
+#
+#   Layer 2 — Specialist Agents (run in parallel)
+#     Each specialist owns one domain and calls its own
+#     tool(s) directly. No middlemen, no wrappers.
+#
+#     ┌──────────────────────────────────────────────────────┐
+#     │                 TRIAGE AGENT  (LLM #1)               │
+#     │      classifies intent → dispatches specialists      │
+#     └──────────┬──────────────┬──────────────┬────────────┘
+#                │              │              │  asyncio.gather()
+#    ┌───────────▼──┐  ┌────────▼──┐  ┌───────▼───┐  ┌──────▼──────┐
+#    │ Budget Agent │  │Family Agent│  │ Eco Agent │  │Luxury Agent │
+#    │  (LLM #2a)  │  │ (LLM #2b) │  │ (LLM #2c) │  │ (LLM #2d)  │
+#    └──────────────┘  └───────────┘  └───────────┘  └─────────────┘
+#          ↓                 ↓               ↓               ↓
+#    Results merged & intersected by Triage Agent, then
+#    formatted as a rich, descriptive 350+ word sales response.
+#
+# LLM calls per query:
+#   Single intent   → 1 (triage) + 1 (specialist)  = 2 total
+#   Dual intent     → 1 (triage) + 2 (parallel)    ≈ wall-clock of 2
+#   Triple intent   → 1 (triage) + 3 (parallel)    ≈ wall-clock of 2
+#   All four        → 1 (triage) + 4 (parallel)    ≈ wall-clock of 2
+#
+# =====================================================
 
 from dotenv import load_dotenv
 from agents import Agent, function_tool, Runner
@@ -405,7 +440,14 @@ STEP 3 — MERGE AND SHORTLIST
 • One specialist called → use its results directly.
 • Multiple specialists → intersect results by make + model + year.
 • Prioritise vehicles closest to the stated budget, not far below it.
-• Select STRICTLY 3-4 vehicles. Never more.
+
+VEHICLE COUNT — follow this precisely:
+- ALWAYS return a minimum of 3 vehicles. No exceptions.
+- User states a number greater than 3 ("show me 5", "give me 4") → return that many.
+- User states a number less than 3 ("show me 1", "just 2") → still return 3.
+- User gives no count → return 3.
+- Hard ceiling: never exceed 6 vehicles regardless of what is asked.
+
 • If no intersection exists: say so clearly, offer the closest alternatives,
   explain the trade-off (e.g. slightly over budget, petrol hybrid vs full EV).
 • NEVER invent, modify, or hallucinate any price or spec.
@@ -425,22 +467,22 @@ Structure every response as follows:
 
 2. FOR EACH VEHICLE (aim for 3–4 rich paragraphs per vehicle):
 
-   **[Make] [Model] ** — $[Exact Price]
+   **[Make] [Model] [Year]** — $[Exact Price]
 
-   • Performance & Drive Feel(100 words)
+   • Performance & Drive Feel
      Describe the engine, power delivery, handling character, and what it feels
      like behind the wheel. Be specific and evocative — not generic.
 
-   • Comfort, Space & Features(50 words)
+   • Comfort, Space & Features
      Highlight interior quality, seating capacity, cargo space, infotainment,
      safety tech, and any standout features relevant to the user's needs.
 
-   • Why It Fits This Customer(40 words)
+   • Why It Fits This Customer
      Connect the vehicle directly to what the user asked for — their budget,
      their lifestyle (family / eco / luxury), and what makes this the right
      choice for them specifically.
 
-3. COMPARISON INSIGHT (2–3 sentences of 10-20 words each, after all vehicles are described)
+3. COMPARISON INSIGHT (2–3 sentences)
    Briefly compare the shortlisted vehicles — which suits which type of buyer,
    or what the deciding factor might be between them.
 
