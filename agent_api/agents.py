@@ -16,11 +16,11 @@
 #     ┌──────────────────────────────────────────────────────┐
 #     │                 TRIAGE AGENT  (LLM #1)               │
 #     │      classifies intent → dispatches specialists      │
-#     └──────────┬──────────────┬──────────────┬────────────┘
+#     └──────────┬──────────────┬──────────────┬────────────-┘
 #                │              │              │  asyncio.gather()
 #    ┌───────────▼──┐  ┌────────▼──┐  ┌───────▼───┐  ┌──────▼──────┐
-#    │ Budget Agent │  │Family Agent│  │ Eco Agent │  │Luxury Agent │
-#    │  (LLM #2a)  │  │ (LLM #2b) │  │ (LLM #2c) │  │ (LLM #2d)  │
+#    │ Budget Agent │  │Family Agent│ │ Eco Agent │  │Luxury Agent │
+#    │  (LLM #2a)   │  │ (LLM #2b) │  │ (LLM #2c) │  │ (LLM #2d)   │
 #    └──────────────┘  └───────────┘  └───────────┘  └─────────────┘
 #          ↓                 ↓               ↓               ↓
 #    Results merged & intersected by Triage Agent, then
