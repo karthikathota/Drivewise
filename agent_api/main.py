@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict, Any
 import uuid
 import asyncio
 
@@ -19,29 +19,42 @@ app.add_middleware(
 
 class UserQuery(BaseModel):
     question: str
-    session_id: Optional[str] = None  # Optional[str] is Python 3.9+ compatible
+    session_id: Optional[str] = None
+
+
+class RecommendResponse(BaseModel):
+    answer: str
+    session_id: str
+    profile: Dict[str, Any]  # returned so Streamlit can display it
 
 
 @app.get("/health")
 async def health_check():
-    """Liveness check — hit this before your demo to confirm the server is up."""
     return {"status": "ok"}
 
 
-@app.post("/recommend")
+@app.post("/recommend", response_model=RecommendResponse)
 async def recommend_vehicle(query: UserQuery):
     if not query.session_id:
         query.session_id = str(uuid.uuid4())
 
     try:
-        answer = await asyncio.wait_for(
+        answer, profile = await asyncio.wait_for(
             handle_user_query(
                 user_id=query.session_id,
                 user_input=query.question
             ),
-            timeout=120.0  # 2 minutes for multi-agent chains
+            timeout=120.0
         )
     except asyncio.TimeoutError:
-        answer = "Request timed out. Please try again with a more specific query."
+        answer = (
+            "I wasn't able to pull results in time — please try again. "
+            "Try being more specific about your budget or vehicle type."
+        )
+        profile = {}
 
-    return {"answer": answer, "session_id": query.session_id}
+    return RecommendResponse(
+        answer=answer,
+        session_id=query.session_id,
+        profile=profile
+    )

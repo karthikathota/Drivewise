@@ -85,6 +85,14 @@ html, body, [data-testid="stAppViewContainer"] {
 /* Global font */
 *, p, span, div, label, li { font-family: 'Rajdhani', sans-serif !important; }
 
+/* Restore Streamlit Icons (prevents 'face' ligature text displaying instead of icon) */
+span.material-symbols-rounded,
+.stIconMaterial,
+.material-icons,
+[class*="Icon"] {
+    font-family: 'Material Symbols Rounded', 'Material Icons' !important;
+}
+
 /* ── Keyframes ── */
 @keyframes scanline {
     0%   { transform: translateX(-100%); opacity: 0; }
@@ -239,7 +247,7 @@ html, body, [data-testid="stAppViewContainer"] {
     animation: fadeUp 0.28s ease forwards;
 }
 /* User */
-[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) .stMarkdown {
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) [data-testid="stChatMessageContent"] {
     background: var(--bg-elevated) !important;
     border: 1px solid var(--border-bright) !important;
     border-left: 3px solid var(--teal) !important;
@@ -251,7 +259,7 @@ html, body, [data-testid="stAppViewContainer"] {
     letter-spacing: 0.02em !important;
 }
 /* Assistant */
-[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]) .stMarkdown {
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]) [data-testid="stChatMessageContent"] {
     background: var(--bg-card) !important;
     border: 1px solid var(--border) !important;
     border-left: 3px solid var(--amber) !important;
@@ -270,15 +278,21 @@ html, body, [data-testid="stAppViewContainer"] {
     letter-spacing: 0.07em !important;
 }
 /* Avatars */
-[data-testid="stChatMessageAvatarUser"] {
-    background: linear-gradient(135deg, var(--teal), #0099a8) !important;
-    border-radius: 2px !important;
-    border: 1px solid var(--teal) !important;
-}
+[data-testid="stChatMessageAvatarUser"],
 [data-testid="stChatMessageAvatarAssistant"] {
-    background: var(--bg-elevated) !important;
-    border-radius: 2px !important;
-    border: 1px solid var(--amber) !important;
+    display: none !important;
+}
+
+/* Disable hover and hide arrows entirely for Status Widget */
+[data-testid="stStatusWidget"] summary {
+    pointer-events: none !important;
+}
+[data-testid="stStatusWidget"] summary > :last-child:not(:first-child),
+[data-testid="stExpanderToggleIcon"] {
+    display: none !important;
+    opacity: 0 !important;
+    color: transparent !important;
+    font-size: 0 !important;
 }
 
 /* ═══════════════════════════════
@@ -385,7 +399,7 @@ html, body, [data-testid="stAppViewContainer"] {
     padding: 6px 0; border-bottom: 1px solid rgba(0,212,200,0.05);
     letter-spacing: 0.03em; line-height: 1.5;
 }
-.sb-qitem::before { content: '›'; color: var(--teal); margin-right: 7px; font-weight: bold; }
+.sb-qitem::before { content: '•'; color: var(--teal); margin-right: 7px; font-weight: bold; }
 .sb-info {
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -602,9 +616,14 @@ if user_input:
         st.markdown(user_input)
 
     with st.chat_message("assistant"):
-        with st.spinner("Dispatching agents — analysing query..."):
-            response = call_backend(user_input)
-        st.markdown(response)
-
+        loading_placeholder = st.empty()
+        with loading_placeholder.container():
+            st.markdown("**⚙️ Agent Network Orchestration**")
+            st.caption("1. Intent diagnosed & evaluating profile map...")
+            st.caption("2. Invoking Vehicle Specialists...")
+            st.caption("3. Formatting final recommendation...")
+            with st.spinner("Synthesizing final advisory..."):
+                response = call_backend(user_input)
+                
     st.session_state.messages.append({"role": "assistant", "content": response})
-    # No st.rerun() — causes double-render loop
+    st.rerun()
